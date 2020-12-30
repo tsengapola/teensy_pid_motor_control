@@ -1,0 +1,9 @@
+
+
+---->for teensy
+rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=230400
+
+-----increase buffer size of topics-----
+
+typedef NodeHandle_<ArduinoHardware, 10, 10, 4096, 4096> NodeHandle;
+
