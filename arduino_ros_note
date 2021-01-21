@@ -1,7 +1,7 @@
 
 
 ---->for teensy
-rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=230400
+rosrun rosserial_python serial_node.py _port:=/dev/ttyACM0 _baud:=230400
 
 -----increase buffer size of topics-----
 

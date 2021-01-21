@@ -22,9 +22,10 @@ struct pose_2d{
 } ;
 
 /*Car kinematics*/
-double base_radius = 0.3;
+double base_radius = 0.165;
 double wheel_diameter = 0.15;
 double ppr = 100;
+double gear_ratio = 32;
 
 Encoder motor1(0, 1);
 Encoder motor2(22, 23);
@@ -36,7 +37,7 @@ const int PinA =  16;
 const int PinB =  15;
 const int PinC =  17;
 const int PinD =  14;
-const int servoPin = 5;
+const int statusPin = 13;
 
 int pwmPin = 20;
 int pwmPin2 = 21;
@@ -44,9 +45,9 @@ int pwmPin2 = 21;
 /*
  * PID
  */
-double kp = 0.02;
-double ki = 0.09;
-double kd = 0.00022;
+double kp = 0.01;
+double ki = 0.7;
+double kd = 0.00002;
 
 // ------- 1st PID -------
 double error=0;
@@ -67,7 +68,8 @@ double out2 = 0;
  */
 double loop_time = 40;
 double loop_time_sec = loop_time/1000.;
-
+int loop_cnt_sec = 1000/loop_time;
+int loop_cnt = 0;
 /*IMU*/
 /* Set the delay between fresh samples */
 uint16_t BNO055_SAMPLERATE_DELAY_MS = 20;
@@ -85,6 +87,9 @@ char odom[] = "/odom";
 char warn[] = "Alive";
 char cbb[] = "cb";
 
+/*False safe*/
+unsigned long HB;
+
 pose_2d pose_2d_ = {0,0,0,0,0};
 geometry_msgs::TransformStamped t;
 nav_msgs::Odometry odom_msg;
@@ -92,13 +97,18 @@ nav_msgs::Odometry odom_msg;
 tf::TransformBroadcaster broadcaster;
 
 void cmdCb( const geometry_msgs::Twist& cmd_msg){
-  target_rpm = cmd_msg.linear.x;
-  target_rpm2 = cmd_msg.linear.y;
 
+  target_rpm = (cmd_msg.linear.x+base_radius*cmd_msg.angular.z) * 60 *gear_ratio/3.1415926535/wheel_diameter;
+  target_rpm2 = (cmd_msg.linear.x-base_radius*cmd_msg.angular.z) * 60 *gear_ratio/3.1415926535/wheel_diameter;
+  if(abs(target_rpm)<100)
+    target_rpm = 0;
+  if(abs(target_rpm2)<100)
+    target_rpm2 = 0;
+  HB = millis();
 }
 
 ros::Publisher odom_pub ("odom", &odom_msg);
-ros::Subscriber<geometry_msgs::Twist> cmd_sub("rpm_vel", &cmdCb );
+ros::Subscriber<geometry_msgs::Twist> cmd_sub("cmd_vel", &cmdCb );
 
 
 void setup() {
@@ -111,7 +121,7 @@ void setup() {
   pinMode(PinD, OUTPUT);
   pinMode(pwmPin,OUTPUT); 
   pinMode(pwmPin2,OUTPUT);
-  pinMode(servoPin,OUTPUT); 
+  pinMode(statusPin,OUTPUT); 
   analogWriteResolution(9);
   analogWriteFrequency(pwmPin, 93750); 
   analogWriteFrequency(pwmPin2, 93750); 
@@ -129,6 +139,10 @@ void setup() {
   broadcaster.init(nh);
   nh.subscribe(cmd_sub);
   nh.advertise(odom_pub);
+
+  //Start status led
+  digitalWrite(statusPin, HIGH);
+
 }
 
 void computeOdom(pose_2d& m_pose_2d, double rpm_r, double rpm_l, double vz){
@@ -137,8 +151,8 @@ void computeOdom(pose_2d& m_pose_2d, double rpm_r, double rpm_l, double vz){
     vz = 0.0;
     
   double dt_theta = (m_pose_2d.vz+vz)/2.*loop_time_sec;
-  double v_r = rpm_r/60.0 * 3.1415926535*wheel_diameter;
-  double v_l = rpm_l/60.0 * 3.1415926535*wheel_diameter;
+  double v_r = rpm_r/60.0/gear_ratio * 3.1415926535*wheel_diameter;
+  double v_l = rpm_l/60.0/gear_ratio * 3.1415926535*wheel_diameter;
   double v = (v_r+v_l)/2.;
 
   double base_x_vel = (m_pose_2d.v+v)/2. * cos( dt_theta );
@@ -153,12 +167,12 @@ void computeOdom(pose_2d& m_pose_2d, double rpm_r, double rpm_l, double vz){
   m_pose_2d.theta += dt_theta;
   m_pose_2d.v = v;
   m_pose_2d.vz = vz;
-  
+
 }
 
 void loop() {
   
-  while (!nh.connected())
+  if(!nh.connected())
   {
     target_rpm = 0.0;
     target_rpm2 = 0.0;
@@ -167,8 +181,22 @@ void loop() {
     digitalWrite(PinC, LOW);
     digitalWrite(PinD, LOW);  
     pose_2d_ = {0,0,0,0,0};
-    nh.spinOnce();
+    loop_cnt_sec = 200/loop_time;
   }
+  else{
+    loop_cnt_sec = 1000/loop_time;
+  }
+  
+  if(abs(millis()-HB)>700){
+    target_rpm = 0.0;
+    target_rpm2 = 0.0;
+    digitalWrite(PinA, LOW);
+    digitalWrite(PinB, LOW);  
+    digitalWrite(PinC, LOW);
+    digitalWrite(PinD, LOW);  
+    pose_2d_ = {0,0,0,0,0}; 
+  }
+  
   //nh.logwarn(warn);
   unsigned long calc_t = millis();
   long directionTick_1, directionTick_2;
@@ -185,18 +213,19 @@ void loop() {
   error = target_rpm - measured_rpm;
   cumError += error * loop_time_sec;                // compute integral
   rateError = (error - lastError)/loop_time_sec;   // compute derivative
-  out = kp*error + ki*cumError + kd*rateError;
+  double kp_adaptive = kp;
+  out = kp_adaptive*error + ki*cumError + kd*rateError;
   lastError = error; 
   /*
   If target is zero, lock it by driver API
   */
-  
-  if(abs(target_rpm)==0){
+ 
+  if(abs(target_rpm)<=50 && abs(target_rpm2)<=50 && abs(measured_rpm)<1000){
     digitalWrite(PinA, LOW);
-    digitalWrite(PinB, LOW);      
+    digitalWrite(PinB, HIGH); 
   }
-  else if(out>0){
-    digitalWrite(PinA, LOW);
+  else if(target_rpm>0){
+    digitalWrite(PinA, HIGH);
     digitalWrite(PinB, HIGH);
     out = min(out,510);   
   }
@@ -204,26 +233,28 @@ void loop() {
     digitalWrite(PinA, HIGH);
     digitalWrite(PinB, LOW);   
     out = out*-1.;      
-    out = max(out,-510);  
+    out = min(out,510);  
   }
-  analogWrite(pwmPin, out);
+  analogWrite(pwmPin, 510-out);
+  
   
   //2nd PID using CD
   error2 = target_rpm2 - measured_rpm2;
   cumError2 += error2 * loop_time_sec;                // compute integral
   rateError2 = (error2 - lastError2)/loop_time_sec;   // compute derivative
-  out2 = kp*error2 + ki*cumError2 + kd*rateError2;
+  double kp_adaptive2 = kp;
+  out2 = kp_adaptive2*error2 + ki*cumError2 + kd*rateError2;
   lastError2 = error2; 
   /*
   If target is zero, lock it by driver API
   */
   
-  if(abs(target_rpm)==0){
+  if(abs(target_rpm)<=50 && abs(target_rpm2)<=50 && abs(measured_rpm2)<1000){
     digitalWrite(PinC, LOW);
-    digitalWrite(PinD, LOW);      
+    digitalWrite(PinD, HIGH);      
   }
-  else if(out2>0){
-    digitalWrite(PinC, LOW);
+  else if(target_rpm2>0){
+    digitalWrite(PinC, HIGH);
     digitalWrite(PinD, HIGH); 
     out2 = min(out2,510);       
   }
@@ -231,9 +262,9 @@ void loop() {
     digitalWrite(PinC, HIGH);
     digitalWrite(PinD, LOW); 
     out2 = out2*-1.;    
-    out2 = max(out2,-510);     
+    out2 = min(out2,510);     
   }
-  analogWrite(pwmPin2, out2);
+  analogWrite(pwmPin2, 510-out2);
 
   /*
    * Get queternion from IMU
@@ -259,8 +290,12 @@ void loop() {
   odom_msg.pose.pose.position.y = pose_2d_.y; 
   odom_msg.pose.pose.position.z = 0.0;
   odom_msg.pose.pose.orientation = t.transform.rotation;
-  odom_msg.twist.twist.linear.x = pose_2d_.v;
-  odom_msg.twist.twist.linear.y = 0.0;
+  //odom_msg.twist.twist.linear.x = pose_2d_.v;
+  //odom_msg.twist.twist.linear.y = 0.0;
+  odom_msg.twist.twist.linear.x = measured_rpm;
+  odom_msg.twist.twist.linear.y = measured_rpm2;
+  odom_msg.twist.twist.angular.x = target_rpm;
+  odom_msg.twist.twist.angular.y = target_rpm2;
   odom_msg.twist.twist.angular.z = pose_2d_.vz;
     
 
@@ -268,6 +303,11 @@ void loop() {
   odom_pub.publish(&odom_msg);
   
   nh.spinOnce();
+  loop_cnt++;
+  if(loop_cnt==loop_cnt_sec){
+    loop_cnt=0;
+    digitalWrite(statusPin, !digitalRead(statusPin));
+  }
   double cal_time = abs(millis()-calc_t);
   if(cal_time<=10)
     delay(loop_time-cal_time);
