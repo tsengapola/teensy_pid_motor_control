@@ -23,7 +23,7 @@ struct pose_2d{
 
 /*Car kinematics*/
 double base_radius = 0.165;
-double wheel_diameter = 0.15;
+double wheel_diameter = 0.125;
 double ppr = 100;
 double gear_ratio = 32;
 
@@ -39,8 +39,8 @@ const int PinC =  17;
 const int PinD =  14;
 const int statusPin = 13;
 
-int pwmPin = 20;
-int pwmPin2 = 21;
+int pwmPin = 9;
+int pwmPin2 = 10;
 
 /*
  * PID
@@ -194,7 +194,6 @@ void loop() {
     digitalWrite(PinB, LOW);  
     digitalWrite(PinC, LOW);
     digitalWrite(PinD, LOW);  
-    pose_2d_ = {0,0,0,0,0}; 
   }
   
   //nh.logwarn(warn);
@@ -203,8 +202,8 @@ void loop() {
   directionTick_1 = motor1.read();
   directionTick_2 = motor2.read();
 
-  measured_rpm = directionTick_1/ppr*60.*1000./loop_time/4.; //4 is mapping of teensy
-  measured_rpm2 = directionTick_2/ppr*60.*1000./loop_time/4.;
+  measured_rpm = directionTick_1/ppr*60.*1000./loop_time/2.; //2 is mapping for teensy
+  measured_rpm2 = directionTick_2/ppr*60.*1000./loop_time/2.;
     
   motor1.write(0);
   motor2.write(0);
@@ -290,12 +289,10 @@ void loop() {
   odom_msg.pose.pose.position.y = pose_2d_.y; 
   odom_msg.pose.pose.position.z = 0.0;
   odom_msg.pose.pose.orientation = t.transform.rotation;
-  //odom_msg.twist.twist.linear.x = pose_2d_.v;
-  //odom_msg.twist.twist.linear.y = 0.0;
-  odom_msg.twist.twist.linear.x = measured_rpm;
-  odom_msg.twist.twist.linear.y = measured_rpm2;
-  odom_msg.twist.twist.angular.x = target_rpm;
-  odom_msg.twist.twist.angular.y = target_rpm2;
+  odom_msg.twist.twist.linear.x = pose_2d_.v;
+  odom_msg.twist.twist.linear.y = 0.0;
+  odom_msg.twist.twist.angular.x = 0.0;
+  odom_msg.twist.twist.angular.y = 0.0;
   odom_msg.twist.twist.angular.z = pose_2d_.vz;
     
 
