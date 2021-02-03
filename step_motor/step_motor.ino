@@ -45,10 +45,10 @@ void joyCb( const sensor_msgs::Joy& joy_msg){
     }
 
     if(joy_msg.buttons[4]==1){
-      analogWriteFrequency(clkPin, 4000); 
+      analogWriteFrequency(clkPin, 1000); 
     }
     else{
-      analogWriteFrequency(clkPin, 2000); 
+      analogWriteFrequency(clkPin, 500); 
     }
     
   }

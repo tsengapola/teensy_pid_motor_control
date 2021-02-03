@@ -22,13 +22,13 @@ struct pose_2d{
 } ;
 
 /*Car kinematics*/
-double base_radius = 0.215;
+double base_radius = 0.165;
 double wheel_diameter = 0.125;
-double ppr = 22;
-double gear_ratio = 54;
+double ppr = 100;
+double gear_ratio = 32;
 
-Encoder motor1(23, 22);
-Encoder motor2(0, 1);
+Encoder motor1(0, 1);
+Encoder motor2(23, 22);
 
 double measured_rpm;
 double measured_rpm2;
@@ -45,8 +45,8 @@ int pwmPin2 = 10;
 /*
  * PID
  */
-double kp = 0.0015;
-double ki = 0.14;
+double kp = 0.01;
+double ki = 0.7;
 double kd = 0.00002;
 
 // ------- 1st PID -------
@@ -100,11 +100,10 @@ void cmdCb( const geometry_msgs::Twist& cmd_msg){
 
   target_rpm = (cmd_msg.linear.x+base_radius*cmd_msg.angular.z) * 60 *gear_ratio/3.1415926535/wheel_diameter;
   target_rpm2 = (cmd_msg.linear.x-base_radius*cmd_msg.angular.z) * 60 *gear_ratio/3.1415926535/wheel_diameter;
-  if(abs(target_rpm)<500)
+  if(abs(target_rpm)<100)
     target_rpm = 0;
-  if(abs(target_rpm2)<500)
+  if(abs(target_rpm2)<100)
     target_rpm2 = 0;
-  
   HB = millis();
 }
 
@@ -220,22 +219,22 @@ void loop() {
   If target is zero, lock it by driver API
   */
  
-  if(abs(target_rpm)<=50 && abs(target_rpm2)<=50 && abs(measured_rpm)<4000){
+  if(abs(target_rpm)<=50 && abs(target_rpm2)<=50 && abs(measured_rpm)<1000){
     digitalWrite(PinA, LOW);
-    digitalWrite(PinB, LOW); 
+    digitalWrite(PinB, HIGH); 
   }
   else if(target_rpm>0){
-    digitalWrite(PinA, LOW);
+    digitalWrite(PinA, HIGH);
     digitalWrite(PinB, HIGH);
-    out = min(out,300);   
+    out = min(out,510);   
   }
   else{
     digitalWrite(PinA, HIGH);
     digitalWrite(PinB, LOW);   
     out = out*-1.;      
-    out = min(out,300);  
+    out = min(out,510);  
   }
-  analogWrite(pwmPin, out);
+  analogWrite(pwmPin, 510-out);
   
   
   //2nd PID using CD
@@ -249,22 +248,22 @@ void loop() {
   If target is zero, lock it by driver API
   */
   
-  if(abs(target_rpm)<=50 && abs(target_rpm2)<=50 && abs(measured_rpm2)<4000){
+  if(abs(target_rpm)<=50 && abs(target_rpm2)<=50 && abs(measured_rpm2)<1000){
     digitalWrite(PinC, LOW);
-    digitalWrite(PinD, LOW);      
+    digitalWrite(PinD, HIGH);      
   }
   else if(target_rpm2>0){
-    digitalWrite(PinC, LOW);
-    digitalWrite(PinD, HIGH); 
-    out2 = min(out2,300);       
+    digitalWrite(PinC, HIGH);
+    digitalWrite(PinD, LOW); 
+    out2 = min(out2,510);       
   }
   else{
     digitalWrite(PinC, HIGH);
-    digitalWrite(PinD, LOW); 
+    digitalWrite(PinD, HIGH); 
     out2 = out2*-1.;    
-    out2 = min(out2,300);     
+    out2 = min(out2,510);     
   }
-  analogWrite(pwmPin2, out2);
+  analogWrite(pwmPin2, 510-out2);
 
   /*
    * Get queternion from IMU
