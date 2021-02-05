@@ -203,8 +203,8 @@ void loop() {
   directionTick_1 = motor1.read();
   directionTick_2 = motor2.read();
 
-  measured_rpm = directionTick_1/ppr*60.*1000./loop_time/2.; //2 is mapping for teensy
-  measured_rpm2 = directionTick_2/ppr*60.*1000./loop_time/2.;
+  measured_rpm = directionTick_1/ppr*60.*1000./loop_time/4.; //2 is mapping for teensy
+  measured_rpm2 = directionTick_2/ppr*60.*1000./loop_time/4.;
     
   motor1.write(0);
   motor2.write(0);
