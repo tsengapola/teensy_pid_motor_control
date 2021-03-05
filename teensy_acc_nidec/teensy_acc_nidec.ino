@@ -321,8 +321,9 @@ void loop() {
   odom_msg.twist.twist.angular.y = 0.0;
   odom_msg.twist.twist.angular.z = pose_2d_.vz;
 
+  /*Querying data from BNO055*/
   sensors_event_t accData;
-  
+  /* option: VECTOR_ACCELEROMETER/VECTOR_GRAVITY */
   bno.getEvent(&accData,Adafruit_BNO055::VECTOR_LINEARACCEL);
 
   imu_msg.header = odom_msg.header;
